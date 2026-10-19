@@ -27,6 +27,8 @@ public final class AscensionConfig {
     public static final ModConfigSpec.IntValue ANNOUNCE_RADIUS;
     public static final ModConfigSpec.IntValue APEX_AGGRO_RADIUS;
     public static final ModConfigSpec.DoubleValue APEX_ATM_GEAR_CHANCE;
+    public static final ModConfigSpec.DoubleValue UNOBTAINIUM_DROP_CHANCE;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> UNOBTAINIUM_DROP_ITEMS;
     public static final ModConfigSpec.BooleanValue DRAGON_ENABLED;
     public static final ModConfigSpec.BooleanValue DRAGON_CRYSTAL_ONLY;
     public static final ModConfigSpec.DoubleValue DRAGON_HEALTH;
@@ -92,7 +94,14 @@ public final class AscensionConfig {
                 .defineInRange("apexAggroRadius", 30, 0, 128);
         APEX_ATM_GEAR_CHANCE = b.comment("Chance an Apex champion spawns wearing a full set of Allthemodium, Vibranium or Unobtainium gear",
                 "(one metal chosen at random). Only used when the Allthemodium mod is installed. 0 = never.")
-                .defineInRange("apexAllthemodiumGearChance", 0.05, 0.0, 1.0);
+                .defineInRange("apexAllthemodiumGearChance", 0.15, 0.0, 1.0);
+        UNOBTAINIUM_DROP_CHANCE = b.comment("Chance an Apex wearing Unobtainium gear drops one alloy ingot or smithing template when killed.",
+                "Only used when the Allthemodium mod is installed. 0 = never.")
+                .defineInRange("unobtainiumDropChance", 1.0, 0.0, 1.0);
+        UNOBTAINIUM_DROP_ITEMS = b.comment("Item ids the Unobtainium Apex can drop. Leave empty to auto-detect every Allthemodium",
+                "alloy ingot and smithing template, e.g. \"allthemodium:unobtainium_allthemodium_alloy_ingot\".")
+                .defineListAllowEmpty("unobtainiumDropItems", List.of(), () -> "allthemodium:unobtainium_allthemodium_alloy_ingot",
+                        o -> o instanceof String);
         b.pop();
 
         b.push("dragon");

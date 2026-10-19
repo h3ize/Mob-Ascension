@@ -224,6 +224,12 @@ public class ChampionEvents {
         for (ItemStack reward : ChampionLoot.roll(level, rank, random)) {
             drop(event, mob, reward);
         }
+
+        if (mob.getPersistentData().getBoolean(ChampionData.UNOBTAINIUM)
+                && random.nextDouble() < AscensionConfig.UNOBTAINIUM_DROP_CHANCE.get()) {
+            ItemStack special = ChampionLoot.rollUnobtainiumDrop(random);
+            if (special != null) drop(event, mob, special);
+        }
     }
     private static ItemStack wear(ItemStack stack, RandomSource random) {
         stack.remove(DataComponents.CUSTOM_DATA);

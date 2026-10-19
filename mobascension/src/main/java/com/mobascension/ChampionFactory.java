@@ -310,6 +310,9 @@ public final class ChampionFactory {
         giveAtmPiece(mob, level, rank, cfg, metal, "chestplate", EquipmentSlot.CHEST, random);
         giveAtmPiece(mob, level, rank, cfg, metal, "leggings", EquipmentSlot.LEGS, random);
         giveAtmPiece(mob, level, rank, cfg, metal, "boots", EquipmentSlot.FEET, random);
+        if (metal.equals("unobtainium") && !mob.getItemBySlot(EquipmentSlot.CHEST).isEmpty()) {
+            mob.getPersistentData().putBoolean(ChampionData.UNOBTAINIUM, true);
+        }
 
         if (!(mob instanceof RangedAttackMob)) {
             ItemStack current = mob.getMainHandItem();

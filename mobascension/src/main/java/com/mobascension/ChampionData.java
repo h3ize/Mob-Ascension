@@ -13,18 +13,15 @@ public final class ChampionData {
     public static final String RANGED = "mobascension_ranged";
     public static final String LEVEL = "mobascension_level";
     public static final String HEALED = "mobascension_healed";
+    public static final String UNOBTAINIUM = "mobascension_unobtainium";
     public static final String DRAGON_CHECKED = "mobascension_dragon_checked";
 
     private ChampionData() {}
-
-    /** Rank rolled for this entity (may not be applied yet). */
     public static Rank getPendingRank(Entity e) {
         CompoundTag t = e.getPersistentData();
         if (!t.contains(RANK, Tag.TAG_STRING)) return null;
         return Rank.byId(t.getString(RANK));
     }
-
-    /** Rank of a fully-applied champion, or null for normal mobs. */
     public static Rank getRank(Entity e) {
         CompoundTag t = e.getPersistentData();
         if (!t.getBoolean(APPLIED)) return null;

@@ -103,4 +103,5 @@ Everything is configurable in `config/mobascension-common.toml` or in-game under
 - Apex always drops at least one enchanted book with a random multi-level enchantment at level 11 up to 20.
 - Books never include enchantments with "error" or "illegal" in their id or name.
 - Apex no longer fires large fireballs (wither skulls only).
-- If Allthemodium is installed, an Apex has a low chance (`apexAllthemodiumGearChance`, default 5%) to spawn in a full set of Allthemodium, Vibranium or Unobtainium gear plus a sword.
+- If Allthemodium is installed, an Apex has a chance (`apexAllthemodiumGearChance`, default 15%) to spawn in a full set of Allthemodium, Vibranium or Unobtainium gear plus a sword, so most Apex champions are still regular ones.
+- An Apex in **Unobtainium** gear has a chance (`unobtainiumDropChance`, default 100%) to drop one Allthemodium alloy ingot or smithing template when killed by a player. The drop pool is auto-detected, or set `unobtainiumDropItems` to choose exact item ids.

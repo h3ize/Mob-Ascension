@@ -29,8 +29,30 @@ import java.util.Optional;
 public final class ChampionLoot {
     private static final int APEX_BOOK_MIN_LEVEL = 11;
     private static final int APEX_BOOK_MAX_LEVEL = 20;
-
     private ChampionLoot() {}
+    public static ItemStack rollUnobtainiumDrop(RandomSource random) {
+        List<Item> pool = new ArrayList<>();
+        List<? extends String> configured = AscensionConfig.UNOBTAINIUM_DROP_ITEMS.get();
+        if (!configured.isEmpty()) {
+            for (String raw : configured) {
+                ResourceLocation id = ResourceLocation.tryParse(raw);
+                if (id == null) continue;
+                Item item = BuiltInRegistries.ITEM.getOptional(id).orElse(Items.AIR);
+                if (item != Items.AIR) pool.add(item);
+            }
+        } else {
+            for (Map.Entry<ResourceKey<Item>, Item> entry : BuiltInRegistries.ITEM.entrySet()) {
+                ResourceLocation id = entry.getKey().location();
+                if (!id.getNamespace().equals("allthemodium")) continue;
+                String path = id.getPath();
+                if (path.contains("template") || (path.contains("alloy") && path.endsWith("_ingot"))) {
+                    pool.add(entry.getValue());
+                }
+            }
+        }
+        if (pool.isEmpty()) return null;
+        return new ItemStack(pool.get(random.nextInt(pool.size())));
+    }
 
     public static List<ItemStack> roll(ServerLevel level, Rank rank, RandomSource random) {
         AscensionConfig.RankSettings cfg = AscensionConfig.rank(rank);
