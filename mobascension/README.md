@@ -2,7 +2,7 @@
 
 Mob Ascension turns ordinary hostile mobs into **champions**. Every time a monster spawns, there is a chance it ascends into one of four ranks: **Veteran, Elite, Mythic or Apex**. Each rank is tougher, deadlier and more rewarding than the last, with rank-coloured glow and particles, rolled stat levels, random abilities, real gear and loot that scales with the fight.
 
-Apex champions are the true threat: they hunt you down, hurl wither skulls and fireballs, and drop a haul worth the trouble.
+Apex champions are the true threat: they hunt you down, hurl wither skulls, and drop a haul worth the trouble.
 
 ## Ranks (4)
 
@@ -11,9 +11,9 @@ Apex champions are the true threat: they hunt you down, hurl wither skulls and f
 | Veteran | Green  | 3 - 5               | ~5.5%      | 1         | +30-50%      | +21-35%      |
 | Elite   | Aqua   | 5 - 8               | ~1.5%      | 2         | +80-128%     | +45-72%      |
 | Mythic  | Purple | 7 - 11              | ~0.5%      | 3         | +210-330%    | +98-154%     |
-| Apex    | Gold   | 10 - 14             | ~0.11%     | 4         | +400-560%    | +180-252%    |
+| Apex    | Gold   | 10 - 14             | ~0.17%     | 4         | +400-560%    | +180-252%    |
 
-About 92% of spawns stay normal mobs. The Warden, Ender Dragon, Wither, Creeper and Vex can never ascend. Mobs from spawners, trial spawners, breeding, buckets and conversions are excluded by default.
+About 92% of spawns stay normal mobs. The Warden, Wither, Creeper and Vex can never ascend, and the Ender Dragon only ascends through the special dragon rule below. Mobs from spawners, trial spawners, breeding, buckets and conversions are excluded by default.
 
 ### How champions work
 - **Random power:** every champion rolls its own stat level inside its rank's range, so no two are exactly alike
@@ -24,7 +24,7 @@ About 92% of spawns stay normal mobs. The Warden, Ender Dragon, Wither, Creeper 
 - **Announcements:** Apex spawns are announced to nearby players; Mythic and Apex deaths set off fireworks
 - **Gear:** champions are armed and armoured by rank (leather and chainmail up to netherite), with random vanilla armor trims and enchantments capped per rank
 
-## Abilities (9)
+## Abilities (8)
 
 Champions roll random abilities, and higher ranks roll more. Each one has its own minimum rank, power and cooldown in the config.
 
@@ -35,16 +35,28 @@ Champions roll random abilities, and higher ranks roll more. Each one has its ow
 | Frostbite   | Veteran  | Slows and freezes on hit                                  |
 | Venomous    | Veteran  | Poisons on hit                                            |
 | Berserker   | Elite    | Enrages at 50% HP: faster and hits harder                 |
-| Blinker     | Elite    | Teleports next to you from up to 16 blocks away           |
-| Volatile    | Mythic   | Explodes on death (no block damage)                       |
 | Splitting   | Mythic   | Spawns two minions on death                               |
 | Stormcaller | Apex     | Calls lightning down on you                               |
 
+## Ascended Ender Dragon
+
+A dragon **respawned with End crystals** ascends into an Apex champion (the very first, natural dragon stays vanilla; set `dragon.onlyWhenRespawnedWithCrystals = false` to change that). All numbers below are configurable in the `[dragon]` section.
+
+- **Health:** 2000 (vanilla 200). **No armor**, no gear and no size change
+- **Damage:** x2 on everything it deals (body, breath, fireballs, skulls); x3 total while enraged
+- **Abilities:** every enabled ability except Splitting and Berserker (Vampiric, Thorned, Frostbite, Venomous, Stormcaller)
+- **Wither skull volleys:** 2 skulls every 6 seconds at the nearest player in range
+- **Lightning storms:** every 10 seconds a bolt strikes every player in range
+- **Brood:** 4 Endermen are summoned at 75%, 50% and 25% health
+- **Enrage:** below 50% health it deals +50% damage and volleys and storms come twice as often
+- **Rewards:** killing it pays out the normal Apex kill rewards
+
 ## Apex champions
 
-- **Ranged attacks:** only Apex shoot, firing **wither skulls and large fireballs** at their target
+- **Ranged attacks:** only Apex shoot, firing **wither skulls** at their target
+- **Skeleton bows:** Apex skeletons (skeleton, stray, bogged) carry a Power 10 bow. It never drops; the Apex loot table handles drops
 - **They hunt you:** an Apex automatically targets the nearest survival player within 30 blocks, no provocation needed
-- **Passive mobs (optional):** with `includePassiveMobs` on, passive mobs can ascend too, and an Apex passive mob hunts players with wither skulls and fireballs. Off by default
+- **Passive mobs (optional):** with `includePassiveMobs` on, passive mobs can ascend too, and an Apex passive mob hunts players with wither skulls. Off by default
 
 ## Rewards
 
@@ -84,3 +96,11 @@ Everything is configurable in `config/mobascension-common.toml` or in-game under
 - Gear lists, enchant caps, armor trims and Apex ranged chance and cooldown
 - Loot: guaranteed loot, reward pools, bonus loot, random books and tools
 - Apex aggro radius, particles, glow colours, name visibility and announcement radius
+
+## Changes in 2.1
+
+- Removed the Blinker (teleport) ability. Ascended mobs, Endermen included, can no longer teleport.
+- Apex always drops at least one enchanted book with a random multi-level enchantment at level 11 up to 20.
+- Books never include enchantments with "error" or "illegal" in their id or name.
+- Apex no longer fires large fireballs (wither skulls only).
+- If Allthemodium is installed, an Apex has a low chance (`apexAllthemodiumGearChance`, default 5%) to spawn in a full set of Allthemodium, Vibranium or Unobtainium gear plus a sword.

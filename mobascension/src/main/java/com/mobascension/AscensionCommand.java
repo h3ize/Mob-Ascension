@@ -18,7 +18,6 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.Arrays;
 
-/** /mobascension summon <rank> [entity] — handy for testing. */
 public final class AscensionCommand {
     private AscensionCommand() {}
 

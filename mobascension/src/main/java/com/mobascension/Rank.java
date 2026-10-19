@@ -4,8 +4,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.world.item.Rarity;
-
-/** The four champion ranks, weakest to strongest. */
 public enum Rank {
     VETERAN("veteran", "Veteran", ChatFormatting.GREEN, 0x55FF55, Rarity.UNCOMMON),
     ELITE("elite", "Elite", ChatFormatting.AQUA, 0x55FFFF, Rarity.RARE),
@@ -25,8 +23,6 @@ public enum Rank {
         this.color = color;
         this.rarity = rarity;
     }
-
-    /** Looked up lazily so no vanilla registry objects are touched during mod construction. */
     public SimpleParticleType particle() {
         return switch (this) {
             case VETERAN -> ParticleTypes.HAPPY_VILLAGER;

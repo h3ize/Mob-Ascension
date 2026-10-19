@@ -14,6 +14,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FireworkRocketEntity;
@@ -24,6 +25,7 @@ import net.minecraft.world.item.component.FireworkExplosion;
 import net.minecraft.world.item.component.Fireworks;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
 import net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
@@ -37,7 +39,6 @@ import java.util.EnumSet;
 import java.util.List;
 
 public class ChampionEvents {
-    /** Decides (once) whether a freshly spawned mob becomes a champion. */
     @SubscribeEvent
     public void onFinalizeSpawn(FinalizeSpawnEvent event) {
         Mob mob = event.getEntity();
@@ -51,15 +52,26 @@ public class ChampionEvents {
             mob.getPersistentData().putString(ChampionData.RANK, rank.id);
         }
     }
-
-    /** Applies the champion once the mob actually enters the world (after vanilla equipment is set). */
     @SubscribeEvent
     public void onJoin(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !(event.getEntity() instanceof Mob mob)) return;
+        if (mob instanceof EnderDragon dragon) {
+            if (!dragon.getPersistentData().getBoolean(ChampionData.DRAGON_CHECKED)) {
+                dragon.getPersistentData().putBoolean(ChampionData.DRAGON_CHECKED, true);
+                if (ChampionFactory.shouldAscendDragon(level)) ChampionFactory.applyDragon(dragon, level);
+            }
+            return;
+        }
         Rank rank = ChampionData.getPendingRank(mob);
         if (rank == null || mob.getPersistentData().getBoolean(ChampionData.APPLIED)) return;
         mob.getPersistentData().putBoolean(ChampionData.APPLIED, true);
         ChampionFactory.apply(mob, level, rank);
+    }
+    @SubscribeEvent
+    public void onEnderTeleport(EntityTeleportEvent.EnderEntity event) {
+        if (event.getEntity() instanceof Mob mob && ChampionData.getRank(mob) != null) {
+            event.setCanceled(true);
+        }
     }
 
     @SubscribeEvent
@@ -77,8 +89,14 @@ public class ChampionEvents {
 
     @SubscribeEvent
     public void onDamagePre(LivingDamageEvent.Pre event) {
-        if (!AscensionConfig.SCALE_RANGED_DAMAGE.get()) return;
         DamageSource source = event.getSource();
+        if (source.getEntity() instanceof EnderDragon dragon && ChampionData.getRank(dragon) != null) {
+            double mult = AscensionConfig.DRAGON_DAMAGE_MULT.get();
+            if (dragon.getHealth() / dragon.getMaxHealth() <= AscensionConfig.DRAGON_ENRAGE_AT.get()) mult *= 1.5;
+            event.setNewDamage((float) (event.getNewDamage() * mult));
+            return;
+        }
+        if (!AscensionConfig.SCALE_RANGED_DAMAGE.get()) return;
         if (!(source.getEntity() instanceof Mob attacker)) return;
         if (source.getDirectEntity() == attacker || !source.is(DamageTypeTags.IS_PROJECTILE)) return;
         Rank rank = ChampionData.getRank(attacker);
@@ -207,8 +225,6 @@ public class ChampionEvents {
             drop(event, mob, reward);
         }
     }
-
-    /** Strips marker data and damages the item randomly (5%-85% durability used). */
     private static ItemStack wear(ItemStack stack, RandomSource random) {
         stack.remove(DataComponents.CUSTOM_DATA);
         if (stack.isDamageableItem()) {

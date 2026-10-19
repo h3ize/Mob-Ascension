@@ -32,15 +32,15 @@ import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.armortrim.ArmorTrim;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.level.dimension.end.EndDragonFight;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
+import net.neoforged.fml.ModList;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-
-/** Rolling ranks and applying stats, effects, gear, name and abilities to a mob. */
 public final class ChampionFactory {
     public static final String GEAR_TAG = "mobascension_gear";
     private static final EquipmentSlot[] ARMOR_SLOTS = {
@@ -67,8 +67,6 @@ public final class ChampionFactory {
         if (!AscensionConfig.INCLUDE_PASSIVE.get() && !(mob instanceof Enemy)) return false;
         return true;
     }
-
-    /** Returns a rank, or null for a normal mob. */
     public static Rank roll(RandomSource random) {
         double total = AscensionConfig.COMMON_WEIGHT.get();
         for (Rank r : Rank.values()) total += AscensionConfig.rank(r).weight.get();
@@ -82,13 +80,9 @@ public final class ChampionFactory {
         }
         return null;
     }
-
-    /** Scale from the rank's MAX level (config), used as a fallback when a mob has no rolled level. */
     public static double statScale(Rank rank) {
         return AscensionConfig.rank(rank).statLevel.get() / 5.0;
     }
-
-    /** Scale from this champion's own randomly rolled level (1..rank max). Level 5 = 1.0x. */
     public static double statScale(Mob mob, Rank rank) {
         int level = ChampionData.getLevel(mob);
         if (level <= 0) return statScale(rank);
@@ -155,6 +149,10 @@ public final class ChampionFactory {
         }
 
         equip(mob, level, rank, cfg);
+        if (rank == Rank.APEX) {
+            applyAtmGear(mob, level, rank, cfg, random);
+            buffApexBow(mob, level);
+        }
 
         if (AscensionConfig.RANK_IN_NAME.get()) applyName(mob, rank, cfg);
 
@@ -178,6 +176,49 @@ public final class ChampionFactory {
                 if (p.distanceToSqr(mob) <= r * r) p.sendSystemMessage(msg);
             }
         }
+    }
+    public static boolean shouldAscendDragon(ServerLevel level) {
+        if (!AscensionConfig.ENABLED.get() || !AscensionConfig.DRAGON_ENABLED.get()) return false;
+        if (!AscensionConfig.DRAGON_CRYSTAL_ONLY.get()) return true;
+        EndDragonFight fight = level.getDragonFight();
+        return fight != null && fight.hasPreviouslyKilledDragon();
+    }
+    public static void applyDragon(EnderDragon dragon, ServerLevel level) {
+        Rank rank = Rank.APEX;
+        AscensionConfig.RankSettings cfg = AscensionConfig.rank(rank);
+        dragon.getPersistentData().putString(ChampionData.RANK, rank.id);
+        dragon.getPersistentData().putBoolean(ChampionData.APPLIED, true);
+        dragon.getPersistentData().putBoolean(ChampionData.HEALED, true);
+        ChampionData.setLevel(dragon, Math.max(1, cfg.statLevel.get()));
+
+        List<Ability> abilities = new ArrayList<>();
+        for (Ability a : Ability.values()) {
+            if (a == Ability.SPLITTING || a == Ability.BERSERKER) continue;
+            if (AscensionConfig.ability(a).enabled.get()) abilities.add(a);
+        }
+        ChampionData.setAbilities(dragon, abilities);
+
+        AttributeInstance hp = dragon.getAttribute(Attributes.MAX_HEALTH);
+        if (hp != null) hp.setBaseValue(AscensionConfig.DRAGON_HEALTH.get());
+        dragon.setHealth(dragon.getMaxHealth());
+
+        int glow = cfg.glowSeconds.get();
+        if (glow != 0) {
+            int ticks = glow < 0 ? MobEffectInstance.INFINITE_DURATION : glow * 20;
+            dragon.addEffect(new MobEffectInstance(MobEffects.GLOWING, ticks, 0, false, true, true));
+        }
+        if (AscensionConfig.RANK_IN_NAME.get()) applyName(dragon, rank, cfg);
+        if (AscensionConfig.GLOW_COLORS.get()) applyTeam(dragon, level, rank);
+
+        StringBuilder ab = new StringBuilder();
+        for (Ability a : abilities) {
+            if (ab.length() > 0) ab.append(", ");
+            ab.append(a.displayName);
+        }
+        Component msg = Component.literal("The Ender Dragon has been empowered by the crystals and has ascended!")
+                .append(ab.length() > 0 ? Component.literal(" [" + ab + "]") : CommonComponents.EMPTY)
+                .withStyle(rank.format);
+        for (ServerPlayer p : level.players()) p.sendSystemMessage(msg);
     }
 
     private static List<Ability> rollAbilities(Mob mob, Rank rank, AscensionConfig.RankSettings cfg) {
@@ -245,6 +286,51 @@ public final class ChampionFactory {
             }
         }
     }
+    private static final int APEX_SKELETON_POWER = 10;
+
+    private static void buffApexBow(Mob mob, ServerLevel level) {
+        if (!(mob instanceof net.minecraft.world.entity.monster.AbstractSkeleton)) return;
+        ItemStack bow = mob.getMainHandItem();
+        if (!(bow.getItem() instanceof net.minecraft.world.item.BowItem)) return;
+        level.registryAccess().registryOrThrow(Registries.ENCHANTMENT)
+                .getHolder(net.minecraft.world.item.enchantment.Enchantments.POWER)
+                .ifPresent(h -> bow.enchant(h, APEX_SKELETON_POWER));
+        mob.setDropChance(EquipmentSlot.MAINHAND, 0.0F);
+    }
+
+    private static final String ATM_MODID = "allthemodium";
+    private static final String[] ATM_METALS = {"allthemodium", "vibranium", "unobtainium"};
+    private static void applyAtmGear(Mob mob, ServerLevel level, Rank rank, AscensionConfig.RankSettings cfg, RandomSource random) {
+        if (!(mob instanceof Enemy)) return;
+        if (!ModList.get().isLoaded(ATM_MODID)) return;
+        if (random.nextDouble() >= AscensionConfig.APEX_ATM_GEAR_CHANCE.get()) return;
+
+        String metal = ATM_METALS[random.nextInt(ATM_METALS.length)];
+        giveAtmPiece(mob, level, rank, cfg, metal, "helmet", EquipmentSlot.HEAD, random);
+        giveAtmPiece(mob, level, rank, cfg, metal, "chestplate", EquipmentSlot.CHEST, random);
+        giveAtmPiece(mob, level, rank, cfg, metal, "leggings", EquipmentSlot.LEGS, random);
+        giveAtmPiece(mob, level, rank, cfg, metal, "boots", EquipmentSlot.FEET, random);
+
+        if (!(mob instanceof RangedAttackMob)) {
+            ItemStack current = mob.getMainHandItem();
+            boolean ranged = current.getItem() instanceof ProjectileWeaponItem || current.getItem() instanceof TridentItem;
+            if (!ranged) giveAtmPiece(mob, level, rank, cfg, metal, "sword", EquipmentSlot.MAINHAND, random);
+        }
+    }
+
+    private static void giveAtmPiece(Mob mob, ServerLevel level, Rank rank, AscensionConfig.RankSettings cfg,
+                                     String metal, String piece, EquipmentSlot slot, RandomSource random) {
+        ResourceLocation id = ResourceLocation.fromNamespaceAndPath(ATM_MODID, metal + "_" + piece);
+        Item item = BuiltInRegistries.ITEM.getOptional(id).orElse(Items.AIR);
+        if (item == Items.AIR) return;
+        ItemStack stack = new ItemStack(item);
+        if (random.nextDouble() < cfg.enchantChance.get()) {
+            GearEnchanter.enchant(stack, rank, slot == EquipmentSlot.MAINHAND, level.registryAccess(), random);
+        }
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.putBoolean(GEAR_TAG, true));
+        mob.setItemSlot(slot, stack);
+        mob.setDropChance(slot, 0.0F);
+    }
 
     private static void giveGear(Mob mob, ServerLevel level, Rank rank, AscensionConfig.RankSettings cfg,
                                  EquipmentSlot slot, RandomSource random) {
@@ -254,8 +340,6 @@ public final class ChampionFactory {
         mob.setItemSlot(slot, stack);
         mob.setDropChance(slot, 0.0F);
     }
-
-    /** Builds one piece of champion gear: base item from config, vanilla enchants, vanilla trim. Null if none configured. */
     public static ItemStack makeGear(ServerLevel level, Rank rank, EquipmentSlot slot, RandomSource random) {
         AscensionConfig.RankSettings cfg = AscensionConfig.rank(rank);
         ItemStack stack = pickItem(cfg, slot, random);
@@ -273,8 +357,6 @@ public final class ChampionFactory {
             GearEnchanter.enchant(stack, rank, slot == EquipmentSlot.MAINHAND, level.registryAccess(), random);
         }
     }
-
-    /** Random trim, restricted to vanilla (minecraft:) patterns and materials. */
     private static void applyTrim(ItemStack stack, ServerLevel level, RandomSource random) {
         var patterns = level.registryAccess().registryOrThrow(Registries.TRIM_PATTERN).holders()
                 .filter(h -> ResourceLocation.DEFAULT_NAMESPACE.equals(h.key().location().getNamespace())).toList();
@@ -285,8 +367,6 @@ public final class ChampionFactory {
                 materials.get(random.nextInt(materials.size())),
                 patterns.get(random.nextInt(patterns.size()))));
     }
-
-    /** Picks a random configured base item for the slot, or null if none is valid. */
     public static ItemStack pickItem(AscensionConfig.RankSettings cfg, EquipmentSlot slot, RandomSource random) {
         List<? extends String> list = cfg.gear.get(slot).get();
         if (list.isEmpty()) return null;

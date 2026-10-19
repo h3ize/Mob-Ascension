@@ -2,6 +2,10 @@ package com.mobascension;
 
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -17,16 +21,14 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.entity.projectile.AbstractHurtingProjectile;
-import net.minecraft.world.entity.projectile.LargeFireball;
-import net.minecraft.world.entity.projectile.SmallFireball;
 import net.minecraft.world.entity.projectile.WitherSkull;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
-
-/** Behaviour of each champion ability. Called from ChampionEvents. */
+import java.util.List;
 public final class AbilityLogic {
     private static final net.minecraft.resources.ResourceLocation BERSERK_SPEED = ChampionFactory.id("berserk_speed");
     private static final net.minecraft.resources.ResourceLocation BERSERK_DAMAGE = ChampionFactory.id("berserk_damage");
@@ -50,6 +52,8 @@ public final class AbilityLogic {
                     2 + rank.ordinal(), w * 0.5, mob.getBbHeight() * 0.4, w * 0.5, 0.02);
         }
 
+        if (mob instanceof EnderDragon dragon) dragonTick(dragon, level);
+
         if (rank == Rank.APEX && mob.tickCount % 20 == 0) {
             int radius = AscensionConfig.APEX_AGGRO_RADIUS.get();
             if (radius > 0) aggro(mob, level, radius);
@@ -72,9 +76,6 @@ public final class AbilityLogic {
         LivingEntity target = mob.getTarget();
         if (target == null || !target.isAlive()) return;
 
-        if (abilities.contains(Ability.BLINKER) && ready(mob, Ability.BLINKER)) {
-            blink(mob, level, target);
-        }
         if (abilities.contains(Ability.STORMCALLER) && target instanceof Player && ready(mob, Ability.STORMCALLER)) {
             if (mob.distanceTo(target) <= 24 && mob.hasLineOfSight(target)) {
                 LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level);
@@ -86,8 +87,81 @@ public final class AbilityLogic {
             }
         }
     }
+    private static final String DRAGON_WAVES = "mobascension_dragon_waves";
+    private static final double[] DRAGON_WAVE_AT = {0.75, 0.5, 0.25};
+    private static void dragonTick(EnderDragon dragon, ServerLevel level) {
+        double ratio = dragon.getHealth() / dragon.getMaxHealth();
+        boolean enraged = ratio <= AscensionConfig.DRAGON_ENRAGE_AT.get();
+        double radius = AscensionConfig.DRAGON_POWER_RADIUS.get();
 
-    /** Targets the nearest survival/adventure player within the radius (also works for passive mobs). */
+        List<ServerPlayer> targets = new ArrayList<>();
+        ServerPlayer nearest = null;
+        double best = Double.MAX_VALUE;
+        for (ServerPlayer p : level.players()) {
+            if (!p.isAlive() || p.isCreative() || p.isSpectator()) continue;
+            double d = dragon.distanceToSqr(p);
+            if (d > radius * radius) continue;
+            targets.add(p);
+            if (d < best) {
+                best = d;
+                nearest = p;
+            }
+        }
+        if (nearest == null) return;
+        if (dragon.getTarget() != nearest) dragon.setTarget(nearest);
+        int volleyCd = AscensionConfig.DRAGON_VOLLEY_COOLDOWN.get();
+        if (enraged) volleyCd = Math.max(10, volleyCd / 2);
+        if (dragon.tickCount % volleyCd == 0) {
+            Vec3 dir = new Vec3(nearest.getX() - dragon.getX(), nearest.getY(0.5) - dragon.getY(0.5),
+                    nearest.getZ() - dragon.getZ());
+            double dist = dir.length();
+            if (dist > 1.0) {
+                Vec3 base = dir.normalize();
+                double offset = Math.min(10.0, dist * 0.6);
+                int skulls = AscensionConfig.DRAGON_VOLLEY_SKULLS.get();
+                for (int i = 0; i < skulls; i++) {
+                    Vec3 d = base.add(dragon.getRandom().nextGaussian() * 0.06,
+                            dragon.getRandom().nextGaussian() * 0.06,
+                            dragon.getRandom().nextGaussian() * 0.06).normalize();
+                    WitherSkull skull = new WitherSkull(level, dragon, d);
+                    skull.setPos(dragon.getX() + base.x * offset, dragon.getY(0.5) + base.y * offset,
+                            dragon.getZ() + base.z * offset);
+                    level.addFreshEntity(skull);
+                }
+                level.playSound(null, dragon.blockPosition(), SoundEvents.WITHER_SHOOT, SoundSource.HOSTILE, 3.0F, 0.7F);
+            }
+        }
+        int stormCd = AscensionConfig.DRAGON_STORM_COOLDOWN.get();
+        if (stormCd > 0) {
+            if (enraged) stormCd = Math.max(20, stormCd / 2);
+            if (dragon.tickCount % stormCd == 0) {
+                for (ServerPlayer p : targets) {
+                    LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level);
+                    if (bolt == null) continue;
+                    bolt.moveTo(p.getX(), p.getY(), p.getZ());
+                    bolt.setDamage((float) power(Ability.STORMCALLER));
+                    level.addFreshEntity(bolt);
+                }
+            }
+        }
+        int count = AscensionConfig.DRAGON_REINFORCEMENTS.get();
+        int waves = dragon.getPersistentData().getInt(DRAGON_WAVES);
+        if (count > 0 && waves < DRAGON_WAVE_AT.length && ratio <= DRAGON_WAVE_AT[waves]) {
+            dragon.getPersistentData().putInt(DRAGON_WAVES, waves + 1);
+            for (int i = 0; i < count; i++) {
+                EnderMan e = EntityType.ENDERMAN.create(level);
+                if (e == null) continue;
+                e.moveTo(nearest.getX() + (dragon.getRandom().nextDouble() - 0.5) * 10.0, nearest.getY(),
+                        nearest.getZ() + (dragon.getRandom().nextDouble() - 0.5) * 10.0,
+                        dragon.getRandom().nextFloat() * 360F, 0F);
+                e.setTarget(nearest);
+                level.addFreshEntity(e);
+            }
+            Component msg = Component.literal("The Ender Dragon calls its brood!").withStyle(Rank.APEX.format);
+            for (ServerPlayer p : targets) p.sendSystemMessage(msg);
+        }
+    }
+
     private static void aggro(Mob mob, ServerLevel level, int radius) {
         LivingEntity current = mob.getTarget();
         if (current instanceof Player cp && cp.isAlive() && mob.distanceTo(cp) <= radius) return;
@@ -110,15 +184,10 @@ public final class AbilityLogic {
                 target.getY(0.5) - mob.getY(0.5),
                 target.getZ() - mob.getZ()).normalize();
         if (rank != Rank.APEX) return;
-        boolean skull = mob.getRandom().nextBoolean();
-        AbstractHurtingProjectile projectile = skull
-                ? new WitherSkull(level, mob, direction)
-                : new LargeFireball(level, mob, direction, 1);
+        AbstractHurtingProjectile projectile = new WitherSkull(level, mob, direction);
         projectile.setPos(mob.getX(), mob.getY(0.5) + 0.3, mob.getZ());
         level.addFreshEntity(projectile);
-        level.playSound(null, mob.blockPosition(),
-                skull ? SoundEvents.WITHER_SHOOT : SoundEvents.GHAST_SHOOT,
-                SoundSource.HOSTILE, 1.0F, 1.0F);
+        level.playSound(null, mob.blockPosition(), SoundEvents.WITHER_SHOOT, SoundSource.HOSTILE, 1.0F, 1.0F);
     }
 
     private static void berserk(Mob mob, ServerLevel level) {
@@ -134,20 +203,6 @@ public final class AbilityLogic {
         } else if (!enraged && active) {
             speed.removeModifier(BERSERK_SPEED);
             if (dmg != null) dmg.removeModifier(BERSERK_DAMAGE);
-        }
-    }
-
-    private static void blink(Mob mob, ServerLevel level, LivingEntity target) {
-        double dist = mob.distanceTo(target);
-        if (dist < 5 || dist > power(Ability.BLINKER)) return;
-        double ox = mob.getX(), oy = mob.getY(), oz = mob.getZ();
-        double ang = mob.getRandom().nextDouble() * Math.PI * 2;
-        double nx = target.getX() + Math.cos(ang) * 2.5;
-        double nz = target.getZ() + Math.sin(ang) * 2.5;
-        if (mob.randomTeleport(nx, target.getY(), nz, true)) {
-            level.sendParticles(ParticleTypes.PORTAL, ox, oy + 1, oz, 20, 0.3, 0.6, 0.3, 0.3);
-            level.sendParticles(ParticleTypes.PORTAL, mob.getX(), mob.getY() + 1, mob.getZ(), 20, 0.3, 0.6, 0.3, 0.3);
-            level.playSound(null, mob.blockPosition(), SoundEvents.ENDERMAN_TELEPORT, SoundSource.HOSTILE, 1.0F, 1.0F);
         }
     }
 
@@ -172,10 +227,6 @@ public final class AbilityLogic {
     }
 
     public static void onDeath(Mob mob, ServerLevel level, EnumSet<Ability> abilities) {
-        if (abilities.contains(Ability.VOLATILE)) {
-            Level.ExplosionInteraction mode = Level.ExplosionInteraction.NONE;
-            level.explode(mob, mob.getX(), mob.getY(0.5), mob.getZ(), (float) power(Ability.VOLATILE), mode);
-        }
         if (abilities.contains(Ability.SPLITTING) && !(mob instanceof Slime)) {
             int count = (int) Math.round(power(Ability.SPLITTING));
             for (int i = 0; i < count; i++) {

@@ -5,6 +5,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -20,15 +21,13 @@ import java.util.Collections;
 import java.util.stream.Collectors;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-
-/**
- * Builds the per-rank kill rewards from the config:
- * guaranteedLoot (always), rewardPool (guaranteed weighted rolls) and bonusLoot (chance based).
- * Line format: item_id|chanceOrWeight|min|max[|enchant=level,enchant=level]
- */
 public final class ChampionLoot {
+    private static final int APEX_BOOK_MIN_LEVEL = 11;
+    private static final int APEX_BOOK_MAX_LEVEL = 20;
+
     private ChampionLoot() {}
 
     public static List<ItemStack> roll(ServerLevel level, Rank rank, RandomSource random) {
@@ -80,29 +79,36 @@ public final class ChampionLoot {
         }
         return out;
     }
-
-    /**
-     * Random enchanted books: a different random positive (non-curse) enchantment per book.
-     * The top level is vanilla max x the rank's multiplier; the roll is anywhere between the rank's minimum fraction
-     * and that top, so higher ranks give better books without always giving the best one.
-     */
     public static List<ItemStack> randomBooks(ServerLevel level, Rank rank, RandomSource random) {
         AscensionConfig.RankSettings cfg = AscensionConfig.rank(rank);
         int min = cfg.bookCountMin.get();
         int max = Math.max(min, cfg.bookCountMax.get());
         int count = min + random.nextInt(max - min + 1);
+        if (rank == Rank.APEX) count = Math.max(count, 1);
         List<ItemStack> out = new ArrayList<>();
         if (count <= 0) return out;
 
         Registry<Enchantment> registry = level.registryAccess().registryOrThrow(Registries.ENCHANTMENT);
         List<Holder.Reference<Enchantment>> pool = registry.holders()
                 .filter(h -> !h.is(EnchantmentTags.CURSE))
+                .filter(h -> !isBannedName(h))
                 .collect(Collectors.toCollection(ArrayList::new));
         Collections.shuffle(pool, new java.util.Random(random.nextLong()));
+        if (rank == Rank.APEX && !pool.isEmpty()) {
+            List<Holder.Reference<Enchantment>> multi = pool.stream()
+                    .filter(h -> h.value().getMaxLevel() >= 2).toList();
+            List<Holder.Reference<Enchantment>> from = multi.isEmpty() ? pool : multi;
+            Holder.Reference<Enchantment> pick = from.get(random.nextInt(from.size()));
+            pool.remove(pick);
+            ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
+            book.enchant(pick, APEX_BOOK_MIN_LEVEL + random.nextInt(APEX_BOOK_MAX_LEVEL - APEX_BOOK_MIN_LEVEL + 1));
+            out.add(book);
+        }
 
         double mult = cfg.bookLevelMult.get();
         double frac = cfg.bookMinFraction.get();
-        for (int i = 0; i < count && i < pool.size(); i++) {
+        int remaining = count - out.size();
+        for (int i = 0; i < remaining && i < pool.size(); i++) {
             Holder<Enchantment> h = pool.get(i);
             int vanillaMax = h.value().getMaxLevel();
             int top = vanillaMax <= 1 ? 1 : Math.max(1, (int) Math.round(vanillaMax * mult));
@@ -114,12 +120,15 @@ public final class ChampionLoot {
         }
         return out;
     }
-
-    /**
-     * Random enchanted tools and weapons from the rank's toolDrops list. Each gets random positive enchantments that are
-     * compatible with the item and each other. Multi-level enchantments roll up to max(vanilla max, toolTopLevel),
-     * and sometimes roll exactly that top level.
-     */
+    public static boolean isBannedName(Holder<Enchantment> holder) {
+        StringBuilder sb = new StringBuilder();
+        holder.unwrapKey().ifPresent(k -> sb.append(k.location()).append(' '));
+        Enchantment e = holder.value();
+        if (e.description().getContents() instanceof TranslatableContents tc) sb.append(tc.getKey()).append(' ');
+        sb.append(e.description().getString());
+        String all = sb.toString().toLowerCase(Locale.ROOT);
+        return all.contains("error") || all.contains("illegal");
+    
     public static List<ItemStack> randomTools(ServerLevel level, Rank rank, RandomSource random) {
         AscensionConfig.RankSettings cfg = AscensionConfig.rank(rank);
         int min = cfg.toolDropsMin.get();
@@ -172,8 +181,6 @@ public final class ChampionLoot {
         int low = Math.max(1, Math.min(top, (int) Math.ceil(top * cfg.toolMinFraction.get())));
         return low + random.nextInt(top - low + 1);
     }
-
-    /** Apex weapon drop alternative: a bow with Power 5 (sometimes 6), Unbreaking 3 and Mending. */
     public static ItemStack apexBow(ServerLevel level, RandomSource random) {
         ItemStack bow = new ItemStack(Items.BOW);
         Registry<Enchantment> registry = level.registryAccess().registryOrThrow(Registries.ENCHANTMENT);
@@ -245,6 +252,7 @@ public final class ChampionLoot {
                         registry.getHolder(ResourceKey.create(Registries.ENCHANTMENT, id));
                 if (ref.isEmpty()) continue;
                 Holder<Enchantment> holder = ref.get();
+                if (book && isBannedName(holder)) continue;
                 if (!book && !holder.value().canEnchant(stack)) continue;
                 boolean compatible = true;
                 for (Holder<Enchantment> other : applied) {

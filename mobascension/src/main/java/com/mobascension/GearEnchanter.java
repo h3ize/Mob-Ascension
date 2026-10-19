@@ -16,8 +16,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
-
-/** Adds plain vanilla enchantments to champion gear. Levels never exceed the vanilla max or the rank's cap. */
 public final class GearEnchanter {
     private static final List<ResourceKey<Enchantment>> POOL = List.of(
             Enchantments.PROTECTION, Enchantments.FIRE_PROTECTION, Enchantments.BLAST_PROTECTION,

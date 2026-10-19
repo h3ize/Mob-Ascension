@@ -5,8 +5,6 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.Entity;
 
 import java.util.EnumSet;
-
-/** Reads/writes champion state in the entity's persistent data (saved with the entity, no networking needed). */
 public final class ChampionData {
     public static final String RANK = "mobascension_rank";
     public static final String APPLIED = "mobascension_applied";
@@ -15,6 +13,7 @@ public final class ChampionData {
     public static final String RANGED = "mobascension_ranged";
     public static final String LEVEL = "mobascension_level";
     public static final String HEALED = "mobascension_healed";
+    public static final String DRAGON_CHECKED = "mobascension_dragon_checked";
 
     private ChampionData() {}
 
@@ -31,8 +30,6 @@ public final class ChampionData {
         if (!t.getBoolean(APPLIED)) return null;
         return getPendingRank(e);
     }
-
-    /** Stat level rolled for this champion (1..rank max), or 0 if none stored (older champions). */
     public static int getLevel(Entity e) {
         return e.getPersistentData().getInt(LEVEL);
     }

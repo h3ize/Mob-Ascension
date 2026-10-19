@@ -11,16 +11,12 @@ import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.common.util.TriState;
-
-/** Client-only entry point: in-game config GUI, and hides champion rank names behind walls. */
 @Mod(value = MobAscension.MODID, dist = Dist.CLIENT)
 public class MobAscensionClient {
     public MobAscensionClient(ModContainer container) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         NeoForge.EVENT_BUS.addListener(MobAscensionClient::onRenderNameTag);
     }
-
-    /** Vanilla draws name tags see-through. Champion names/ranks are only drawn with a clear line of sight. */
     private static void onRenderNameTag(RenderNameTagEvent event) {
         Entity entity = event.getEntity();
         if (!(entity instanceof Mob mob) || !isChampion(mob)) return;

@@ -6,7 +6,6 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 import java.util.EnumMap;
 import java.util.List;
 
-/** Everything in Mob Ascension is configurable here (file: mobascension-common.toml, or the in-game config GUI). */
 public final class AscensionConfig {
     private static final EnumMap<Rank, RankSettings> RANKS = new EnumMap<>(Rank.class);
     private static final EnumMap<Ability, AbilitySettings> ABILITIES = new EnumMap<>(Ability.class);
@@ -27,6 +26,17 @@ public final class AscensionConfig {
     public static final ModConfigSpec.DoubleValue COMMON_WEIGHT;
     public static final ModConfigSpec.IntValue ANNOUNCE_RADIUS;
     public static final ModConfigSpec.IntValue APEX_AGGRO_RADIUS;
+    public static final ModConfigSpec.DoubleValue APEX_ATM_GEAR_CHANCE;
+    public static final ModConfigSpec.BooleanValue DRAGON_ENABLED;
+    public static final ModConfigSpec.BooleanValue DRAGON_CRYSTAL_ONLY;
+    public static final ModConfigSpec.DoubleValue DRAGON_HEALTH;
+    public static final ModConfigSpec.DoubleValue DRAGON_DAMAGE_MULT;
+    public static final ModConfigSpec.DoubleValue DRAGON_ENRAGE_AT;
+    public static final ModConfigSpec.IntValue DRAGON_POWER_RADIUS;
+    public static final ModConfigSpec.IntValue DRAGON_VOLLEY_COOLDOWN;
+    public static final ModConfigSpec.IntValue DRAGON_VOLLEY_SKULLS;
+    public static final ModConfigSpec.IntValue DRAGON_STORM_COOLDOWN;
+    public static final ModConfigSpec.IntValue DRAGON_REINFORCEMENTS;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> BLACKLIST;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> WHITELIST;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> EXCLUDED_SPAWN_TYPES;
@@ -39,12 +49,13 @@ public final class AscensionConfig {
         INCLUDE_PASSIVE = b.comment("If true, passive mobs (animals, villagers, etc.) can ascend too.",
                 "If false (default), only hostile mobs (Zombies, Creepers, Skeletons...) can.",
                 "If true, passive mobs can ascend too; an Apex passive mob hunts players and attacks them with",
-                "wither skulls and fireballs.")
+                "wither skulls.")
                 .define("includePassiveMobs", false);
         VANILLA_ONLY = b.comment("Only mobs from vanilla Minecraft can ascend (mobs added by other mods never do).")
                 .define("vanillaMobsOnly", true);
         BLACKLIST = b.comment("Entity types that can never become champions.",
-                "Warden, Ender Dragon, Wither, Creeper and Vex are ALWAYS excluded in code as well.")
+                "Warden, Ender Dragon, Wither, Creeper and Vex are ALWAYS excluded in code as well.",
+                "(The Ender Dragon only ascends through the special [dragon] section below.)")
                 .defineListAllowEmpty("blacklist",
                         List.of("minecraft:warden", "minecraft:ender_dragon", "minecraft:wither", "minecraft:creeper", "minecraft:vex"),
                         () -> "minecraft:warden", o -> o instanceof String);
@@ -79,6 +90,34 @@ public final class AscensionConfig {
                 .defineInRange("announceRadius", 96, 8, 1024);
         APEX_AGGRO_RADIUS = b.comment("Apex champions automatically target the nearest player within this many blocks (0 = off).")
                 .defineInRange("apexAggroRadius", 30, 0, 128);
+        APEX_ATM_GEAR_CHANCE = b.comment("Chance an Apex champion spawns wearing a full set of Allthemodium, Vibranium or Unobtainium gear",
+                "(one metal chosen at random). Only used when the Allthemodium mod is installed. 0 = never.")
+                .defineInRange("apexAllthemodiumGearChance", 0.05, 0.0, 1.0);
+        b.pop();
+
+        b.push("dragon");
+        DRAGON_ENABLED = b.comment("Ascend the Ender Dragon into an Apex champion with extra powers (no armor).")
+                .define("enabled", true);
+        DRAGON_CRYSTAL_ONLY = b.comment("Only a dragon respawned with End crystals ascends (the first, natural dragon stays vanilla).",
+                "Set to false to also empower the very first dragon.")
+                .define("onlyWhenRespawnedWithCrystals", true);
+        DRAGON_HEALTH = b.comment("Max health of an ascended dragon (vanilla is 200).")
+                .defineInRange("health", 2000.0, 1.0, 100000.0);
+        DRAGON_DAMAGE_MULT = b.comment("Multiplier on ALL damage dealt by the ascended dragon (body, breath, fireballs, skulls).")
+                .defineInRange("damageMultiplier", 2.0, 1.0, 50.0);
+        DRAGON_ENRAGE_AT = b.comment("Below this share of its health the dragon enrages: +50% damage, volleys and storms twice as often.")
+                .defineInRange("enrageAtHealthShare", 0.5, 0.0, 1.0);
+        DRAGON_POWER_RADIUS = b.comment("Players within this many blocks of the dragon are targeted by its powers.")
+                .defineInRange("powerRadius", 64, 16, 256);
+        DRAGON_VOLLEY_COOLDOWN = b.comment("Ticks between wither skull volleys (20 = 1 second).")
+                .defineInRange("volleyCooldownTicks", 120, 10, 2400);
+        DRAGON_VOLLEY_SKULLS = b.comment("Wither skulls per volley.")
+                .defineInRange("volleySkulls", 2, 1, 12);
+        DRAGON_STORM_COOLDOWN = b.comment("Ticks between lightning storms that strike every player in range (0 = off).",
+                "Strike damage uses the Stormcaller ability power.")
+                .defineInRange("stormCooldownTicks", 200, 0, 2400);
+        DRAGON_REINFORCEMENTS = b.comment("Endermen summoned at 75%, 50% and 25% health (0 = off).")
+                .defineInRange("reinforcementsPerWave", 4, 0, 16);
         b.pop();
 
         b.push("ranks");
@@ -149,7 +188,7 @@ public final class AscensionConfig {
             b.push(rank.id);
 
             weight = b.comment("Relative spawn weight of this rank (0 disables the rank).")
-                    .defineInRange("weight", new double[]{6.0, 1.6, 0.55, 0.12}[i], 0.0, 100000.0);
+                    .defineInRange("weight", new double[]{6.0, 1.6, 0.55, 0.18}[i], 0.0, 100000.0);
             displayName = b.define("displayName", rank.defaultName);
 
             b.push("stats");
@@ -224,7 +263,7 @@ public final class AscensionConfig {
 
             b.push("ranged");
             rangedChance = b.comment("Chance this champion can shoot projectiles at its target.",
-                    "ONLY Apex shoots (randomly wither skulls or large fireballs). Other ranks never shoot, whatever this is set to.")
+                    "ONLY Apex shoots (wither skulls). Other ranks never shoot, whatever this is set to.")
                     .defineInRange("rangedAttackChance", new double[]{0.0, 0.0, 0.0, 0.5}[i], 0.0, 1.0);
             rangedCooldown = b.comment("Ticks between shots (20 = 1 second).")
                     .defineInRange("rangedCooldownTicks", new int[]{160, 120, 100, 140}[i], 5, 100000);
